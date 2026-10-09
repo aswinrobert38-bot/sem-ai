@@ -44,7 +44,7 @@ section[data-testid="stVerticalBlock"] > div:has(> .sem-panel) { background:#0d1
 </style>
 """, unsafe_allow_html=True)
 
-PAGES = ["Overview", "Risk Assessment", "Student Explorer", "CIA Analytics",
+PAGES = ["My Score Planner", "Overview", "Risk Assessment", "Student Explorer", "CIA Analytics",
          "Improvement Planner", "AI Assistant", "Reports", "Data Management", "Settings"]
 
 # ---------- Data and storage ----------
@@ -257,12 +257,12 @@ con=connect()
 seed_demo(con)
 if "data_source" not in st.session_state: st.session_state.data_source="demo"
 if "selected_student" not in st.session_state: st.session_state.selected_student=""
-if "page" not in st.session_state: st.session_state.page="Overview"
+if "page" not in st.session_state: st.session_state.page="My Score Planner"
 
 with st.sidebar:
     st.markdown('<div class="sem-kicker">ACADEMIC INTELLIGENCE</div>',unsafe_allow_html=True)
     st.markdown("# ◈ SemScore AI")
-    st.caption("Student Risk & Performance Platform")
+    st.caption("Anna University R2023 planning prototype • Student-first score planner")
     st.divider()
     page=st.radio("WORKSPACE",PAGES,index=PAGES.index(st.session_state.page),key="page_nav",label_visibility="visible")
     st.session_state.page=page
@@ -286,14 +286,112 @@ summary=student_summary(df)
 page=st.session_state.page
 
 # ---------- Header ----------
-st.markdown('<div class="sem-kicker">SEMESTER INTELLIGENCE / 2026</div>',unsafe_allow_html=True)
+st.markdown('<div class="sem-kicker">ANNA UNIVERSITY R2023 • STUDENT SCORE PLANNER PROTOTYPE</div>',unsafe_allow_html=True)
 st.title(page)
-st.caption("Evidence-led academic monitoring, transparent risk signals and actionable support.")
+st.caption("Plan CIA 3, estimate the semester-exam mark you need, and work toward a target grade. Confirm your autonomous-college scheme before relying on the estimates.")
 if source=="demo":
     st.info("Demonstration mode: all student records are fictional sample data. Switch to Uploaded dataset to work with your own CSV.")
 
+# ---------- Student Score Planner ----------
+if page=="My Score Planner":
+    st.markdown("Enter CIA 1 and CIA 2, estimate CIA 3, and see the semester-exam score needed for your target. This is a prototype for Anna University Regulation 2023-style planning; KRCE autonomous rules and subject-specific assessment schemes must be verified.")
+    with st.expander("Set your course marking scheme", expanded=True):
+        st.warning("Prototype defaults only: the CIA aggregation, internal/exam split, pass rules, and grade boundaries below are editable assumptions—not a verified official KRCE scheme.")
+        cfg1, cfg2, cfg3 = st.columns(3)
+        with cfg1:
+            cia_max = st.number_input("Maximum mark for each CIA", min_value=1, max_value=200, value=50, step=1, help="Enter the maximum mark shown in your course assessment scheme.")
+            cia_method = st.selectbox("How are the 3 CIA scores combined?", ["Average all 3", "Best 2 of 3"], help="Select only after confirming the rule used for your subject.")
+        with cfg2:
+            internal_weight = st.number_input("Internal component weight", min_value=1, max_value=100, value=40, step=1, help="Editable prototype value; verify your subject scheme.")
+            exam_max = st.number_input("Maximum semester-exam mark", min_value=1, max_value=200, value=100, step=1)
+        with cfg3:
+            exam_weight = st.number_input("Semester-exam component weight", min_value=1, max_value=100, value=60, step=1, help="Editable prototype value; verify your subject scheme.")
+            grade_choice = st.selectbox("Target grade", ["O / Outstanding (example cutoff 91%)", "A+ (example cutoff 81%)", "A (example cutoff 71%)", "B+ (example cutoff 61%)", "B (example cutoff 56%)", "C (example cutoff 50%)", "Custom target"], index=1)
+            preset_targets = {"O / Outstanding (example cutoff 91%)":91, "A+ (example cutoff 81%)":81, "A (example cutoff 71%)":71, "B+ (example cutoff 61%)":61, "B (example cutoff 56%)":56, "C (example cutoff 50%)":50}
+            if grade_choice == "Custom target":
+                target_total = st.slider("Target final subject score (%)", min_value=0, max_value=100, value=85, step=1)
+            else:
+                target_total = st.number_input("Target cutoff (%) — verify locally", min_value=0, max_value=100, value=preset_targets[grade_choice], step=1, help="These are editable example cutoffs for prototype demonstration, not a certified KRCE grade table.")
+    if int(internal_weight) + int(exam_weight) != 100:
+        st.warning("Your internal and semester-exam weights currently add up to " + str(int(internal_weight)+int(exam_weight)) + ", not 100. The estimate still uses the weights as entered; adjust them to match your official scheme.")
+    st.divider()
+    st.subheader("1. Enter your known CIA scores")
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        cia1 = st.number_input("CIA 1 score", min_value=0.0, max_value=float(cia_max), value=min(35.0,float(cia_max)), step=1.0, key="planner_cia1")
+    with m2:
+        cia2 = st.number_input("CIA 2 score", min_value=0.0, max_value=float(cia_max), value=min(40.0,float(cia_max)), step=1.0, key="planner_cia2")
+    with m3:
+        cia3_expected = st.number_input("Try a CIA 3 score", min_value=0.0, max_value=float(cia_max), value=min(40.0,float(cia_max)), step=1.0, key="planner_cia3", help="Change this value to test different outcomes. The required-score calculation is shown below.")
+    exam_expected = st.slider("Semester-exam score you think you can achieve", min_value=0, max_value=int(exam_max), value=int(round(exam_max*0.8)), step=1, key="planner_exam_expected")
+
+    c1p, c2p = float(cia1)/float(cia_max)*100, float(cia2)/float(cia_max)*100
+    c3p = float(cia3_expected)/float(cia_max)*100
+    examp = float(exam_expected)/float(exam_max)*100
+    cia_values = [c1p,c2p,c3p]
+    if cia_method == "Average all 3":
+        internal_pct = sum(cia_values)/3
+        combine_note = "The internal estimate uses the average of all three CIA percentages."
+        def needed_cia3(required_internal_pct):
+            return max(0.0, 3*required_internal_pct-c1p-c2p)
+    else:
+        internal_pct = sum(sorted(cia_values, reverse=True)[:2])/2
+        combine_note = "The internal estimate uses the best two CIA percentages."
+        def needed_cia3(required_internal_pct):
+            if (c1p+c2p)/2 >= required_internal_pct:
+                return 0.0
+            return max(0.0, 2*required_internal_pct-max(c1p,c2p))
+
+    internal_contribution = internal_pct*float(internal_weight)/100
+    exam_contribution = examp*float(exam_weight)/100
+    final_estimate = internal_contribution+exam_contribution
+    k1,k2,k3,k4 = st.columns(4)
+    k1.metric("Current CIA-based internal level", f"{internal_pct:.1f}%")
+    k2.metric("Internal contribution", f"{internal_contribution:.1f}/{internal_weight}")
+    k3.metric("Exam contribution estimate", f"{exam_contribution:.1f}/{exam_weight}")
+    k4.metric("Estimated final score", f"{final_estimate:.1f}/100", delta=f"Target {target_total}%" if final_estimate>=target_total else f"{target_total-final_estimate:.1f} points below target")
+    st.caption(combine_note + " All calculations assume CIA scores scale linearly to the internal component; change settings to match your official scheme.")
+
+    st.divider()
+    st.subheader("2. What do you need in CIA 3?")
+    expected_exam_contribution = examp*float(exam_weight)/100
+    required_internal_pct = (float(target_total)-expected_exam_contribution)*100/float(internal_weight)
+    required_cia3_pct = needed_cia3(required_internal_pct) if required_internal_pct <= 100 else float('inf')
+    required_cia3_raw = required_cia3_pct*float(cia_max)/100
+    if required_internal_pct <= 0:
+        st.success(f"With your expected semester-exam score, you have already reached the target contribution. Any CIA 3 score keeps the estimate at or above {target_total}% under this model.")
+    elif required_internal_pct > 100 or required_cia3_raw > float(cia_max):
+        st.warning(f"The target of {target_total}% is not reachable with the semester-exam score you entered under these settings. Increase the expected exam score, adjust your target, or verify the marking scheme.")
+    else:
+        st.success(f"Estimated CIA 3 requirement: **{required_cia3_raw:.1f} / {cia_max}** to target {target_total}% overall, assuming you score {exam_expected}/{exam_max} in the semester exam.")
+    goals = []
+    for goal in [60,70,75,80,85,90]:
+        exam_contrib = examp*float(exam_weight)/100
+        req_internal = (goal-exam_contrib)*100/float(internal_weight)
+        req_c3 = needed_cia3(req_internal) if req_internal <= 100 else float('inf')
+        raw_req = req_c3*float(cia_max)/100
+        if req_internal <= 0: status = "Already supported by expected exam score"; display = "0 needed"
+        elif req_internal > 100 or raw_req > float(cia_max): status = "Not reachable with current exam estimate"; display = "Not reachable"
+        else: status = "Possible under current assumptions"; display = f"{raw_req:.1f}/{cia_max}"
+        goals.append({"Final score target":f"{goal}%","CIA 3 needed":display,"Status":status})
+    st.dataframe(pd.DataFrame(goals),hide_index=True,use_container_width=True)
+
+    st.divider()
+    st.subheader("3. What semester-exam score do you need?")
+    if final_estimate >= target_total:
+        st.info(f"With CIA 3 = {cia3_expected}/{cia_max}, your current exam estimate gives {final_estimate:.1f}/100, which meets the selected target.")
+    required_exam_pct = (float(target_total)-internal_contribution)*100/float(exam_weight)
+    required_exam_raw = required_exam_pct*float(exam_max)/100
+    if required_exam_pct <= 0:
+        st.success(f"Your estimated internal contribution already meets the target of {target_total}%. The model does not require a positive exam score for this target, but follow your institution's minimum-exam rules.")
+    elif required_exam_pct > 100:
+        st.warning(f"With CIA 3 = {cia3_expected}/{cia_max}, the target of {target_total}% is not reachable through the semester exam alone under these settings.")
+    else:
+        st.success(f"With CIA 3 = {cia3_expected}/{cia_max}, aim for at least **{required_exam_raw:.1f}/{exam_max}** in the semester exam to reach {target_total}% overall under this model.")
+    st.caption("Important: this is a planning prototype, not an official grade predictor. Grade cutoffs shown are illustrative and editable. It does not enforce official minimum CIA/semester-exam requirements, rounding rules, course-category differences, or KRCE autonomous regulations. Confirm the exact scheme with your department before using the results.")
+
 # ---------- Overview ----------
-if page=="Overview":
+elif page=="Overview":
     if df.empty:
         st.warning("No uploaded records yet. Open Data Management to import a CSV, or switch to Demo dataset.")
     else:
@@ -662,7 +760,7 @@ elif page=="Settings":
     st.subheader("Application information")
     st.write(f"Database path: `{DB_PATH}`")
     st.write(f"Active dataset: **{source}**")
-    st.write(f"App version: **1.0.0**")
+    st.write(f"App version: **1.1.0**")
     st.warning("For public deployments, do not upload real identifiable student data to an unauthenticated app. Use fictional/demo data for presentations. Streamlit Community Cloud local files may not be durable across app restarts or redeployments; use managed external storage for important records.")
     st.subheader("Optional LLM integration")
     st.write("The assistant currently uses deterministic local analysis and does not send student data to an external service. An LLM API can be added later using Streamlit secrets, but is not required.")
