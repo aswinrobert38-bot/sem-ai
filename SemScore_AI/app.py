@@ -256,7 +256,8 @@ subject_template = pd.DataFrame({
     "Credits": [3],
     "CIA 1": [30],
     "CIA 2": [30],
-    "CIA 3": [None],
+    "CIA 3 (out of 100)": [None],
+    "Final Internal Marks": [None],
     "Semester Exam Marks": [None],
 })
 st.download_button(
@@ -271,22 +272,23 @@ uploaded_subjects = st.file_uploader(
     "Upload your subject data (CSV)",
     type=["csv"],
     key="subject_csv_upload",
-    help="Required columns: Subject, Credits, CIA 1, CIA 2, CIA 3. Semester Exam Marks is optional; leave it blank before the exam."
+    help="Required columns: Subject, Credits. Optional: Final Internal Marks, CIA 1, CIA 2, CIA 3 (out of 100), Semester Exam Marks. If Final Internal Marks is blank, enter component marks in the assessment section below."
 )
 
 if uploaded_subjects is not None and st.button("Import uploaded subject data", key="import_subject_csv"):
     try:
         incoming_subjects = pd.read_csv(uploaded_subjects)
-        required_csv_cols = ["Subject", "Credits", "CIA 1", "CIA 2", "CIA 3"]
+        required_csv_cols = ["Subject", "Credits"]
         missing_cols = [c for c in required_csv_cols if c not in incoming_subjects.columns]
         if missing_cols:
             st.error("CSV is missing required columns: " + ", ".join(missing_cols))
         elif incoming_subjects.empty:
             st.error("The uploaded CSV has no subject rows.")
         else:
-            if "Semester Exam Marks" not in incoming_subjects.columns:
-                incoming_subjects["Semester Exam Marks"] = None
-            expected_cols = required_csv_cols + ["Semester Exam Marks"]
+            for optional_col in ["Final Internal Marks", "CIA 1", "CIA 2", "CIA 3 (out of 100)", "Semester Exam Marks"]:
+                if optional_col not in incoming_subjects.columns:
+                    incoming_subjects[optional_col] = None
+            expected_cols = ["Subject", "Credits", "Final Internal Marks", "CIA 1", "CIA 2", "CIA 3 (out of 100)", "Semester Exam Marks"]
             st.session_state.subjects = incoming_subjects[expected_cols].copy()
             st.success(f"Loaded {len(incoming_subjects)} subject(s) from your CSV.")
     except Exception as exc:
@@ -294,12 +296,13 @@ if uploaded_subjects is not None and st.button("Import uploaded subject data", k
 
 if "subjects" not in st.session_state:
     st.session_state.subjects = pd.DataFrame(columns=[
-        "Subject", "Credits", "CIA 1", "CIA 2", "CIA 3", "Semester Exam Marks"
+        "Subject", "Credits", "Final Internal Marks", "CIA 1", "CIA 2", "CIA 3 (out of 100)", "Semester Exam Marks"
     ])
 
-# Keep older saved/imported subject tables compatible with the added exam column.
-if "Semester Exam Marks" not in st.session_state.subjects.columns:
-    st.session_state.subjects["Semester Exam Marks"] = None
+# Keep older saved/imported tables compatible with the updated columns.
+for _col in ["Final Internal Marks", "CIA 1", "CIA 2", "CIA 3 (out of 100)", "Semester Exam Marks"]:
+    if _col not in st.session_state.subjects.columns:
+        st.session_state.subjects[_col] = None
 
 edited = st.data_editor(
     st.session_state.subjects,
@@ -313,16 +316,17 @@ edited = st.data_editor(
         "Credits": st.column_config.NumberColumn(
             "Credits", min_value=1, max_value=10, step=1
         ),
-        "CIA 1": st.column_config.NumberColumn(
-            "CIA 1", min_value=0, max_value=cia_max
+        "Final Internal Marks": st.column_config.NumberColumn(
+            "Final Internal Marks (if portal provides it)", min_value=0, max_value=internal_max,
+            step=0.01, required=False,
+            help="If provided, SemScore AI uses this directly. Leave blank only when you need to calculate it from assessment components."
         ),
-        "CIA 2": st.column_config.NumberColumn(
-            "CIA 2", min_value=0, max_value=cia_max
-        ),
-        "CIA 3": st.column_config.NumberColumn(
-            "CIA 3 (leave blank if pending)", min_value=0, max_value=cia_max,
+        "CIA 1": st.column_config.NumberColumn("CIA 1 (optional component data)", min_value=0, max_value=200, required=False),
+        "CIA 2": st.column_config.NumberColumn("CIA 2 (optional component data)", min_value=0, max_value=200, required=False),
+        "CIA 3 (out of 100)": st.column_config.NumberColumn(
+            "CIA 3 (out of 100; leave blank if pending)", min_value=0, max_value=100,
             step=1, required=False,
-            help="Leave blank until CIA 3 is completed. Then enter the actual mark."
+            help="CIA 3 is scored out of 100. Its contribution to internal marks must follow the configured official assessment scheme."
         ),
         "Semester Exam Marks": st.column_config.NumberColumn(
             "Semester Exam Marks (optional)", min_value=0, max_value=exam_max,
@@ -338,16 +342,17 @@ if edited.empty:
 
 st.session_state.subjects = edited.copy()
 
-required_columns = ["Subject", "Credits", "CIA 1", "CIA 2", "CIA 3", "Semester Exam Marks"]
+required_columns = ["Subject", "Credits", "Final Internal Marks", "CIA 1", "CIA 2", "CIA 3 (out of 100)", "Semester Exam Marks"]
 
 if any(c not in edited.columns for c in required_columns):
     st.error("Please keep the required subject columns.")
     st.stop()
 
-required_numeric_columns = ["Credits", "CIA 1", "CIA 2"]
+required_numeric_columns = ["Credits"]
 for column in required_numeric_columns:
     edited[column] = pd.to_numeric(edited[column], errors="coerce")
-edited["CIA 3"] = pd.to_numeric(edited["CIA 3"], errors="coerce")
+for _col in ["Final Internal Marks", "CIA 1", "CIA 2", "CIA 3 (out of 100)"]:
+    edited[_col] = pd.to_numeric(edited[_col], errors="coerce")
 edited["Semester Exam Marks"] = pd.to_numeric(edited["Semester Exam Marks"], errors="coerce")
 
 if edited[required_numeric_columns].isna().any().any():
@@ -358,12 +363,11 @@ if (edited["Credits"] <= 0).any():
     st.error("Credits must be greater than zero.")
     st.stop()
 
-for column in ["CIA 1", "CIA 2"]:
-    if ((edited[column] < 0) | (edited[column] > cia_max)).any():
-        st.error(f"{column} must be between 0 and {cia_max}.")
-        st.stop()
-if ((edited["CIA 3"].dropna() < 0) | (edited["CIA 3"].dropna() > cia_max)).any():
-    st.error(f"CIA 3 must be between 0 and {cia_max} when entered.")
+if ((edited["Final Internal Marks"].dropna() < 0) | (edited["Final Internal Marks"].dropna() > internal_max)).any():
+    st.error(f"Final Internal Marks must be between 0 and {internal_max}.")
+    st.stop()
+if ((edited["CIA 3 (out of 100)"].dropna() < 0) | (edited["CIA 3 (out of 100)"].dropna() > 100)).any():
+    st.error("CIA 3 must be between 0 and 100.")
     st.stop()
 if ((edited["Semester Exam Marks"].dropna() < 0) | (edited["Semester Exam Marks"].dropna() > exam_max)).any():
     st.error(f"Semester Exam Marks must be between 0 and {exam_max} when entered.")
@@ -389,10 +393,12 @@ def grade_point(score):
 
 
 def internal_from_cia(cia_marks):
-    """Scale an average CIA mark to the configured internal-mark maximum."""
-    if not cia_marks or cia_max <= 0:
-        return 0.0
-    return (sum(cia_marks) / len(cia_marks)) / cia_max * internal_max
+    """Fallback estimate only; never use this if the portal's final internal is supplied."""
+    valid = [float(x) for x in cia_marks if pd.notna(x)]
+    if not valid:
+        return None
+    # Explicitly a provisional estimate, not claimed as the official AU R2023 formula.
+    return (sum(valid) / len(valid)) / 100 * internal_max
 
 
 def final_score(internal_marks, exam_percent):
@@ -408,116 +414,64 @@ results = []
 for _, row in edited.iterrows():
     subject = str(row["Subject"])
     credits = int(row["Credits"])
-    cia1, cia2 = float(row["CIA 1"]), float(row["CIA 2"])
-    cia3_entered = pd.notna(row["CIA 3"])
-    cia3_actual = float(row["CIA 3"]) if cia3_entered else None
+    final_internal_input = row["Final Internal Marks"]
+    has_portal_internal = pd.notna(final_internal_input)
+    cia1, cia2 = row["CIA 1"], row["CIA 2"]
+    cia3_value = row["CIA 3 (out of 100)"]
+    cia3_entered = pd.notna(cia3_value)
+    cia3_actual = float(cia3_value) if cia3_entered else None
     actual_exam = row["Semester Exam Marks"]
     exam_entered = pd.notna(actual_exam)
 
-    # Provisional internal score based only on completed CIA 1 and CIA 2.
-    current_internal = internal_from_cia([cia1, cia2])
-    current_internal_percent = (current_internal / internal_max * 100) if internal_max else 0.0
+    # The portal's final internal marks always take priority when provided.
+    if has_portal_internal:
+        current_internal = float(final_internal_input)
+        internal_source = "Portal-provided final internal (used directly)"
+    else:
+        available_components = [x for x in [cia1, cia2] if pd.notna(x)]
+        current_internal = internal_from_cia(available_components)
+        internal_source = "Provisional estimate — enter all required AU R2023 assessment components for an official calculation"
+        if current_internal is None:
+            current_internal = 0.0
 
-    # Predict the CIA 3 mark needed to reach the desired final subject score,
-    # assuming the user's expected exam percentage and equal weighting of 3 CIAs.
+    current_internal_percent = current_internal / internal_max * 100 if internal_max else 0.0
     total_weight = internal_weight + exam_weight
-    if internal_weight > 0 and total_weight > 0 and internal_max > 0:
-        required_internal_percent = (
-            desired_final * total_weight - expected_exam * exam_weight
-        ) / internal_weight
-        required_internal_mark = required_internal_percent / 100 * internal_max
-        required_average_cia_mark = required_internal_mark / internal_max * cia_max
-        required_cia3_raw = required_average_cia_mark * 3 - cia1 - cia2
-    else:
-        required_cia3_raw = 0.0
-
-    if required_cia3_raw <= 0:
-        predicted_cia3 = 0
-        predicted_cia3_percent = 0.0
-        cia_message = "Target already covered by CIA 1 and CIA 2 under current assumptions"
-    elif required_cia3_raw > cia_max:
-        predicted_cia3 = None
-        predicted_cia3_percent = required_cia3_raw / cia_max * 100
-        cia_message = "Target cannot be reached through CIA 3 alone"
-    else:
-        predicted_cia3 = math.ceil(required_cia3_raw)
-        predicted_cia3_percent = predicted_cia3 / cia_max * 100
-        cia_message = "Achievable if this CIA 3 target is reached"
-
-    # If CIA 3 is still pending, project using the predicted target. If the target
-    # is impossible, use the maximum CIA 3 mark for a best-case projection.
-    cia3_for_projection = cia3_actual if cia3_entered else (
-        predicted_cia3 if predicted_cia3 is not None else cia_max
-    )
-    projected_internal = internal_from_cia([cia1, cia2, float(cia3_for_projection)])
-    projected_internal_percent = (projected_internal / internal_max * 100) if internal_max else 0.0
-
-    # Use actual exam marks when supplied; otherwise use expected exam percentage.
-    if exam_entered:
-        exam_percent_used = float(actual_exam) / exam_max * 100 if exam_max else 0.0
-        exam_label = "Actual exam result"
-    else:
-        exam_percent_used = float(expected_exam)
-        exam_label = "Projection (expected exam)"
-
-    final_with_entered_cia3 = final_score(projected_internal, exam_percent_used)
-    final_using_cia12_only = final_score(current_internal, exam_percent_used)
-
-    # Required exam percentage after CIA 1, CIA 2 and the entered CIA 3 mark.
-    if exam_weight > 0 and total_weight > 0 and internal_max > 0:
-        required_exam_percent = (
-            desired_final * total_weight - projected_internal_percent * internal_weight
-        ) / exam_weight
-    elif desired_final <= projected_internal_percent:
+    if exam_weight > 0 and total_weight > 0:
+        required_exam_percent = (desired_final * total_weight - current_internal_percent * internal_weight) / exam_weight
+    elif desired_final <= current_internal_percent:
         required_exam_percent = 0.0
     else:
         required_exam_percent = float("inf")
 
     if required_exam_percent <= 0:
-        exam_needed_text = "0%"
-        exam_marks_text = f"0/{exam_max}"
-        exam_status = "Target covered by internal score"
+        exam_marks_text, exam_status = f"0/{exam_max}", "Target covered by current internal score"
     elif required_exam_percent <= 100:
-        exam_needed_text = f"{required_exam_percent:.1f}%"
-        exam_marks_text = f"{math.ceil(required_exam_percent / 100 * exam_max)}/{exam_max}"
-        exam_status = "Achievable under current assumptions"
+        exam_marks_text, exam_status = f"{math.ceil(required_exam_percent / 100 * exam_max)}/{exam_max}", "Achievable under configured weightage"
     else:
-        exam_needed_text = ">100%"
-        exam_marks_text = f"Over {exam_max}"
-        exam_status = "Target not achievable with current internal marks"
+        exam_marks_text, exam_status = f"Over {exam_max}", "Target not achievable under configured weightage"
 
-    grade_score = final_with_entered_cia3
-    if exam_entered and cia3_entered:
-        final_status = "Based on actual CIA 3 and exam marks"
-    elif exam_entered:
-        final_status = "Projection: CIA 3 target + actual exam"
-    elif cia3_entered:
-        final_status = "Projection using actual CIA 3 + expected exam"
-    else:
-        final_status = "Projection using CIA 3 target + expected exam"
-
+    # CIA 3 is scored out of 100. It is not silently treated as an extra internal component.
+    cia3_target = math.ceil(max(0, min(100, desired_final)))
+    cia3_note = ("Actual CIA 3 mark entered; use course-specific regulation to map it into internals" if cia3_entered
+                 else "CIA 3 target shown out of 100; not added directly to final internal marks")
+    exam_percent_used = (float(actual_exam) / exam_max * 100) if exam_entered and exam_max else float(expected_exam)
+    final_percent = final_score(current_internal, exam_percent_used)
+    status = "Actual exam + supplied internal" if exam_entered and has_portal_internal else ("Projection using supplied internal" if has_portal_internal else "Projection; internal is estimated")
     results.append({
-        "Subject": subject,
-        "Credits": credits,
-        "CIA 1": cia1,
-        "CIA 2": cia2,
-        "Current internal (CIA 1+2)": round(current_internal, 2),
-        "Current internal (%)": round(current_internal_percent, 1),
-        "CIA 3 entered": (cia3_actual if cia3_entered else "Pending"),
-        "CIA 3 used for projection": (cia3_actual if cia3_entered else cia3_for_projection),
-        "Projected internal after CIA 3": round(projected_internal, 2),
-        "Projected internal (%)": round(projected_internal_percent, 1),
-        "Predicted CIA 3 target": (f"{predicted_cia3}/{cia_max}" if predicted_cia3 is not None else f"Over {cia_max}"),
-        "Predicted CIA 3 (%)": round(predicted_cia3_percent, 1),
-        "CIA 3 prediction note": cia_message,
-        "Semester Exam Marks": (float(actual_exam) if exam_entered else None),
-        "Exam needed for target (%)": exam_needed_text,
-        "Exam marks needed": exam_marks_text,
-        "Exam target status": exam_status,
-        "Final subject score (%)": round(final_with_entered_cia3, 2),
-        "Score type": final_status,
-        "Estimated grade": get_grade(grade_score),
-        "Grade point": grade_point(grade_score),
+        "Subject": subject, "Credits": credits,
+        "Final Internal Marks Provided": round(float(final_internal_input), 2) if has_portal_internal else "Not provided",
+        "Current Internal Used": round(current_internal, 2),
+        "Internal Data Source": internal_source,
+        "CIA 1": cia1 if pd.notna(cia1) else "Not entered",
+        "CIA 2": cia2 if pd.notna(cia2) else "Not entered",
+        "CIA 3 (out of 100)": cia3_actual if cia3_entered else "Pending",
+        "CIA 3 target (out of 100)": cia3_target,
+        "CIA 3 note": cia3_note,
+        "Semester Exam Marks": float(actual_exam) if exam_entered else "Pending",
+        "Exam needed (%)": round(max(0, required_exam_percent), 1) if math.isfinite(required_exam_percent) else ">100%",
+        "Exam marks needed": exam_marks_text, "Exam target status": exam_status,
+        "Final subject score (%)": round(final_percent, 2),
+        "Score type": status, "Estimated grade": get_grade(final_percent), "Grade point": grade_point(final_percent),
     })
 
 result_df = pd.DataFrame(results)
@@ -558,27 +512,27 @@ st.caption("The dashboard uses your entered credits, assessment rules, grade bou
 # ---------------- CIA 3 AND INTERNAL OVERVIEW ----------------
 
 st.header("4. Current Internal & CIA 3 Predictor")
-st.write("Current internal is calculated from CIA 1 and CIA 2. Leave CIA 3 blank while it is pending: SemScore AI will use its predicted target for projections. Once CIA 3 is completed, enter the actual mark and the projection updates automatically. Enter actual semester exam marks after the exam.")
+st.info("If the portal provides Final Internal Marks, SemScore AI uses them directly. If missing, enter the applicable assessment components; this version labels a CIA-only fallback as provisional rather than claiming it is the official Anna University R2023 calculation. CIA 3 is out of 100 and is not automatically added to internal marks.")
+st.write("Portal-provided Final Internal Marks take priority. If missing, enter applicable assessment components; incomplete component data is clearly labelled as provisional. CIA 3 is out of 100 and is kept separate until the official course-specific conversion is configured.")
 
 chart_col, summary_col = st.columns([1.45, 1])
 with chart_col:
     st.markdown("#### CIA marks by subject")
-    chart_data = edited.set_index("Subject")[["CIA 1", "CIA 2", "CIA 3"]]
+    chart_data = edited.set_index("Subject")[["CIA 1", "CIA 2", "CIA 3 (out of 100)"]].apply(pd.to_numeric, errors="coerce")
     st.bar_chart(chart_data, height=300)
 with summary_col:
     st.markdown("#### Your targets")
     st.metric("Target final subject score", f"{desired_final:.0f}%")
     st.metric("Expected semester exam", f"{expected_exam:.0f}%")
     st.metric("Subjects in your plan", f"{len(result_df)}")
-    actual_exam_count = int(result_df["Semester Exam Marks"].notna().sum())
+    actual_exam_count = int((result_df["Semester Exam Marks"] != "Pending").sum())
     st.metric("Subjects with actual exam marks", f"{actual_exam_count}/{len(result_df)}")
-    st.caption("Leave CIA 3 and Semester Exam Marks blank while they are pending. The projection uses the predicted CIA 3 target until you enter the actual mark. CIA prediction assumes three equally weighted CIA assessments; confirm this with your college.")
+    st.caption("CIA 3 is scored out of 100. Do not treat the raw mark as internal marks without the applicable course conversion rule.")
 
 st.markdown("#### Subject-wise current internal, CIA 3 target and exam plan")
 st.dataframe(result_df[[
-    "Subject", "CIA 1", "CIA 2", "Current internal (CIA 1+2)", "Current internal (%)",
-    "CIA 3 entered", "CIA 3 used for projection", "Predicted CIA 3 target", "Predicted CIA 3 (%)",
-    "Projected internal after CIA 3", "Exam needed for target (%)", "Exam marks needed",
+    "Subject", "Final Internal Marks Provided", "Current Internal Used", "Internal Data Source",
+    "CIA 3 (out of 100)", "CIA 3 target (out of 100)", "Exam needed (%)", "Exam marks needed",
     "Final subject score (%)", "Score type", "Estimated grade", "Grade point"
 ]], use_container_width=True, hide_index=True)
 
@@ -716,3 +670,4 @@ st.caption(
     "rules with KRCE's official autonomous regulations before relying on "
     "the projections. This prototype does not guarantee a particular grade."
 )
+
