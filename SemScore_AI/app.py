@@ -13,28 +13,104 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root {
+  --bg: #070b14;
+  --panel: #0f1728;
+  --panel-2: #131f34;
+  --border: rgba(148, 163, 184, .16);
+  --blue: #60a5fa;
+  --cyan: #67e8f9;
+  --text: #e8eef9;
+  --muted: #94a3b8;
+}
 .stApp {
-    background: #0b1120;
-    color: #f1f5f9;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgba(37,99,235,.16), transparent 34%),
+    radial-gradient(ellipse at 90% 10%, rgba(124,58,237,.12), transparent 30%),
+    var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
 }
+[data-testid="stHeader"] { background: rgba(7,11,20,.72); }
+.block-container { max-width: 1440px; padding-top: 1.8rem; padding-bottom: 3rem; }
 [data-testid="stSidebar"] {
-    background: #111b2e;
+  background: linear-gradient(180deg, #0e1728 0%, #0a1020 100%);
+  border-right: 1px solid var(--border);
 }
-div[data-testid="stMetric"] {
-    background: #162238;
-    padding: 16px;
-    border-radius: 12px;
-    border: 1px solid #263752;
+[data-testid="stSidebar"] > div { padding-top: 1.5rem; }
+h1, h2, h3 { font-family: 'Space Grotesk', sans-serif !important; letter-spacing: -.035em; }
+h1 { color: #f8fafc !important; font-size: clamp(2.1rem, 4vw, 3rem) !important; }
+h2 { color: #e8eef9 !important; margin-top: 1.2rem !important; }
+h3 { color: #cbd5e1 !important; }
+p, label, .stMarkdown { color: var(--text); }
+[data-testid="stMetric"] {
+  background: linear-gradient(145deg, rgba(20,33,56,.96), rgba(13,22,39,.96));
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 19px 20px;
+  box-shadow: 0 12px 28px rgba(0,0,0,.14);
+  transition: border-color .2s ease, transform .2s ease;
 }
-h1, h2, h3 {
-    color: #60a5fa;
+[data-testid="stMetric"]:hover { border-color: rgba(96,165,250,.5); transform: translateY(-2px); }
+[data-testid="stMetricLabel"] { color: #a9b8ce !important; font-size: .88rem !important; }
+[data-testid="stMetricValue"] { color: var(--blue) !important; font-family: 'Space Grotesk', sans-serif; }
+[data-testid="stMetricDelta"] { font-size: .82rem; }
+div[data-testid="stVerticalBlockBorderWrapper"] {
+  border-color: var(--border) !important;
+  border-radius: 16px !important;
+}
+div.stButton > button, div.stDownloadButton > button {
+  background: linear-gradient(100deg, #2563eb, #4f46e5);
+  color: white; border: 1px solid rgba(147,197,253,.22);
+  border-radius: 11px; padding: .55rem 1rem; font-weight: 700;
+  transition: all .18s ease;
+}
+div.stButton > button:hover, div.stDownloadButton > button:hover {
+  border-color: #93c5fd; box-shadow: 0 0 22px rgba(59,130,246,.2);
+  color: white; transform: translateY(-1px);
+}
+div[data-baseweb="select"] > div, div[data-baseweb="input"] > div,
+div[data-baseweb="textarea"] > div {
+  background: #0e192b; border-color: #2a3b56; border-radius: 10px;
+}
+[data-testid="stDataFrame"], [data-testid="stTable"] {
+  border: 1px solid var(--border); border-radius: 13px; overflow: hidden;
+}
+[data-testid="stAlert"] { border-radius: 12px; }
+hr { border-color: var(--border) !important; margin: 1.4rem 0 !important; }
+[data-testid="stProgressBar"] > div > div { background: linear-gradient(90deg,#3b82f6,#22d3ee); }
+small, .stCaption, [data-testid="stCaptionContainer"] { color: var(--muted) !important; }
+@media (max-width: 768px) {
+  .block-container { padding: 1rem .8rem 2rem; }
+  [data-testid="stMetric"] { padding: 13px; }
 }
 </style>
 """, unsafe_allow_html=True)
 
-st.title("SemScore AI")
-st.caption("Your personal academic improvement planner")
-st.write("Plan CIA 3. Prepare for semester exams. Work toward your CGPA goal.")
+st.markdown("""
+<div style="
+  padding: 1.35rem 1.5rem; margin: .2rem 0 1.25rem;
+  border: 1px solid rgba(96,165,250,.24); border-radius: 20px;
+  background: linear-gradient(115deg, rgba(20,38,69,.92), rgba(17,24,48,.82) 60%, rgba(49,29,83,.55));
+  box-shadow: 0 18px 48px rgba(0,0,0,.18);">
+  <div style="font-size:.76rem; font-weight:700; letter-spacing:.16em; color:#67e8f9; text-transform:uppercase;">
+    Academic intelligence platform
+  </div>
+  <div style="font-family:'Space Grotesk',sans-serif; font-size:clamp(2rem,4vw,3rem); font-weight:700; letter-spacing:-.045em; color:#f8fafc; margin-top:.3rem;">
+    SemScore <span style="color:#60a5fa;">AI</span>
+  </div>
+  <div style="font-size:1rem; color:#b6c5da; margin-top:.25rem;">
+    Turn your current marks into a clear CIA 3 action plan.
+  </div>
+  <div style="display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1rem;">
+    <span style="padding:.35rem .7rem; border-radius:999px; background:rgba(96,165,250,.12); border:1px solid rgba(96,165,250,.22); color:#bfdbfe; font-size:.8rem;">CIA 3 Goal Predictor</span>
+    <span style="padding:.35rem .7rem; border-radius:999px; background:rgba(103,232,249,.08); border:1px solid rgba(103,232,249,.18); color:#a5f3fc; font-size:.8rem;">CGPA Planning</span>
+    <span style="padding:.35rem .7rem; border-radius:999px; background:rgba(167,139,250,.09); border:1px solid rgba(167,139,250,.2); color:#ddd6fe; font-size:.8rem;">Personal Study Plan</span>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
 # ---------------- SIDEBAR SETTINGS ----------------
 
@@ -374,9 +450,34 @@ st.caption(
     "These are planning estimates, not official university results."
 )
 
+# ---------------- CIA 3 VISUAL OVERVIEW (UI ADDITION) ----------------
+
+st.header("4. CIA 3 Goal Predictor")
+st.write(
+    "Compare your current CIA marks and review the required CIA 3 guidance "
+    "for each subject below. The existing assessment calculations are retained."
+)
+
+chart_col, summary_col = st.columns([1.45, 1])
+
+with chart_col:
+    st.markdown("#### Assessment marks by subject")
+    chart_data = edited.set_index("Subject")[["CIA 1", "CIA 2", "CIA 3"]]
+    st.bar_chart(chart_data, color=["#60a5fa", "#a78bfa", "#22d3ee"], height=300)
+
+with summary_col:
+    st.markdown("#### Current target settings")
+    st.metric("Target final subject score", f"{desired_final:.0f}%")
+    st.metric("Expected semester exam mark", f"{expected_exam:.0f}%")
+    st.metric("Subjects in your plan", f"{len(result_df)}")
+    st.caption(
+        "Change marks or targets above to refresh the projection. "
+        "Confirm the formula and grade boundaries with your college."
+    )
+
 # ---------------- SUBJECT PLAN ----------------
 
-st.header("4. Subject-wise Recovery Plan")
+st.header("5. Subject-wise Recovery Plan")
 
 st.dataframe(
     result_df,
@@ -393,7 +494,7 @@ st.download_button(
 
 # ---------------- STUDY TIMETABLE ----------------
 
-st.header("5. Your Daily Study Timetable")
+st.header("6. Your Daily Study Timetable")
 
 st.write(
     f"Your plan uses **{study_hours:.1f} hours per day**. "
@@ -446,7 +547,7 @@ st.download_button(
 
 # ---------------- WEEKLY CHECKLIST ----------------
 
-st.header("6. Weekly Checklist")
+st.header("7. Weekly Checklist")
 
 checklist = [
     "Review CIA 1 and CIA 2 mistakes for each subject",
@@ -463,7 +564,7 @@ for item in checklist:
 
 # ---------------- CGPA SCENARIOS ----------------
 
-st.header("7. CGPA Scenario Planner")
+st.header("8. CGPA Scenario Planner")
 
 st.write(
     "Estimate the CGPA you could achieve with different semester GPAs."
