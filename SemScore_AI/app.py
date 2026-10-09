@@ -177,14 +177,19 @@ grade_cutoffs = {
     "B": st.sidebar.number_input("B minimum (%)", 0, 100, 50),
 }
 
+grade_cutoffs["C"] = st.sidebar.number_input(
+    "C grade minimum (%)", min_value=0, max_value=100, value=40
+)
+
+st.sidebar.subheader("Grade points (enter your college values)")
 grade_points = {
-    "O": 10,
-    "A+": 9,
-    "A": 8,
-    "B+": 7,
-    "B": 6,
-    "C": 5,
-    "U": 0,
+    "O": st.sidebar.number_input("O grade point", 0.0, 10.0, 10.0, 0.5),
+    "A+": st.sidebar.number_input("A+ grade point", 0.0, 10.0, 9.0, 0.5),
+    "A": st.sidebar.number_input("A grade point", 0.0, 10.0, 8.0, 0.5),
+    "B+": st.sidebar.number_input("B+ grade point", 0.0, 10.0, 7.0, 0.5),
+    "B": st.sidebar.number_input("B grade point", 0.0, 10.0, 6.0, 0.5),
+    "C": st.sidebar.number_input("C grade point", 0.0, 10.0, 5.0, 0.5),
+    "U": st.sidebar.number_input("U grade point", 0.0, 10.0, 0.0, 0.5),
 }
 
 st.sidebar.subheader("Previous academic record")
@@ -242,16 +247,51 @@ st.info(
 
 # ---------------- SUBJECT INPUT ----------------
 
-st.header("2. Enter Your Subject Marks")
+st.header("2. Feed Your Academic Data")
+st.caption("Use your own subjects and official assessment rules. The analytics below are calculated from the values you provide.")
+
+# Users can either upload their own subject data or enter it in the table.
+subject_template = pd.DataFrame({
+    "Subject": ["Example subject"],
+    "Credits": [3],
+    "CIA 1": [30],
+    "CIA 2": [30],
+    "CIA 3": [0],
+})
+st.download_button(
+    "Download subject data template (CSV)",
+    subject_template.to_csv(index=False).encode("utf-8"),
+    file_name="SemScore_subject_input_template.csv",
+    mime="text/csv",
+    help="Fill in your actual subjects, credits, and CIA marks, then upload the CSV."
+)
+
+uploaded_subjects = st.file_uploader(
+    "Upload your subject data (CSV)",
+    type=["csv"],
+    key="subject_csv_upload",
+    help="Required columns: Subject, Credits, CIA 1, CIA 2, CIA 3"
+)
+
+if uploaded_subjects is not None and st.button("Import uploaded subject data", key="import_subject_csv"):
+    try:
+        incoming_subjects = pd.read_csv(uploaded_subjects)
+        expected_cols = ["Subject", "Credits", "CIA 1", "CIA 2", "CIA 3"]
+        missing_cols = [c for c in expected_cols if c not in incoming_subjects.columns]
+        if missing_cols:
+            st.error("CSV is missing required columns: " + ", ".join(missing_cols))
+        elif incoming_subjects.empty:
+            st.error("The uploaded CSV has no subject rows.")
+        else:
+            st.session_state.subjects = incoming_subjects[expected_cols].copy()
+            st.success(f"Loaded {len(incoming_subjects)} subject(s) from your CSV.")
+    except Exception as exc:
+        st.error(f"Could not read that CSV: {exc}")
 
 if "subjects" not in st.session_state:
-    st.session_state.subjects = pd.DataFrame({
-        "Subject": ["Subject 1", "Subject 2", "Subject 3"],
-        "Credits": [3, 4, 4],
-        "CIA 1": [30, 30, 30],
-        "CIA 2": [30, 30, 30],
-        "CIA 3": [0, 0, 0],
-    })
+    st.session_state.subjects = pd.DataFrame(columns=[
+        "Subject", "Credits", "CIA 1", "CIA 2", "CIA 3"
+    ])
 
 edited = st.data_editor(
     st.session_state.subjects,
