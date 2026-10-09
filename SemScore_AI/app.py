@@ -293,102 +293,220 @@ if source=="demo":
     st.info("Demonstration mode: all student records are fictional sample data. Switch to Uploaded dataset to work with your own CSV.")
 
 # ---------- Student Score Planner ----------
-if page=="My Score Planner":
-    st.markdown("Enter CIA 1 and CIA 2, estimate CIA 3, and see the semester-exam score needed for your target. This is a prototype for Anna University Regulation 2023-style planning; KRCE autonomous rules and subject-specific assessment schemes must be verified.")
-    with st.expander("Set your course marking scheme", expanded=True):
-        st.warning("Prototype defaults only: the CIA aggregation, internal/exam split, pass rules, and grade boundaries below are editable assumptions—not a verified official KRCE scheme.")
+if page == "My Score Planner":
+    st.markdown("Build a recovery plan from your first two CIAs, prepare for CIA 3, and set a subject-by-subject semester-exam target. Your goal is an **8.5 CGPA**; all target calculations are estimates that depend on the marking scheme you enter.")
+    st.info("Student mode: enter your own marks below. If the app is showing the demo dataset, its student records are fictional and are not used for your personal score plan.")
+
+    with st.expander("1. Configure your assessment and grade scheme", expanded=True):
+        st.warning("Only the all-three-CIA average is fixed here, as requested. The internal/exam split, maximum marks, pass requirements and grade-point boundaries are editable assumptions. Confirm them with KRCE's official autonomous scheme before relying on the results.")
         cfg1, cfg2, cfg3 = st.columns(3)
         with cfg1:
-            cia_max = st.number_input("Maximum mark for each CIA", min_value=1, max_value=200, value=50, step=1, help="Enter the maximum mark shown in your course assessment scheme.")
-            cia_method = st.selectbox("How are the 3 CIA scores combined?", ["Average all 3", "Best 2 of 3"], help="Select only after confirming the rule used for your subject.")
+            cia_max = st.number_input("Maximum mark for each CIA", min_value=1, max_value=200, value=50, step=1, key="personal_cia_max")
+            internal_weight = st.number_input("Internal component (% of final)", min_value=1, max_value=99, value=40, step=1, key="personal_internal_weight")
         with cfg2:
-            internal_weight = st.number_input("Internal component weight", min_value=1, max_value=100, value=40, step=1, help="Editable prototype value; verify your subject scheme.")
-            exam_max = st.number_input("Maximum semester-exam mark", min_value=1, max_value=200, value=100, step=1)
+            exam_max = st.number_input("Maximum semester-exam mark", min_value=1, max_value=200, value=100, step=1, key="personal_exam_max")
+            exam_weight = st.number_input("Semester-exam component (% of final)", min_value=1, max_value=99, value=60, step=1, key="personal_exam_weight")
         with cfg3:
-            exam_weight = st.number_input("Semester-exam component weight", min_value=1, max_value=100, value=60, step=1, help="Editable prototype value; verify your subject scheme.")
-            grade_choice = st.selectbox("Target grade", ["O / Outstanding (example cutoff 91%)", "A+ (example cutoff 81%)", "A (example cutoff 71%)", "B+ (example cutoff 61%)", "B (example cutoff 56%)", "C (example cutoff 50%)", "Custom target"], index=1)
-            preset_targets = {"O / Outstanding (example cutoff 91%)":91, "A+ (example cutoff 81%)":81, "A (example cutoff 71%)":71, "B+ (example cutoff 61%)":61, "B (example cutoff 56%)":56, "C (example cutoff 50%)":50}
-            if grade_choice == "Custom target":
-                target_total = st.slider("Target final subject score (%)", min_value=0, max_value=100, value=85, step=1)
-            else:
-                target_total = st.number_input("Target cutoff (%) — verify locally", min_value=0, max_value=100, value=preset_targets[grade_choice], step=1, help="These are editable example cutoffs for prototype demonstration, not a certified KRCE grade table.")
+            expected_exam_pct = st.slider("Expected exam performance (%)", min_value=0, max_value=100, value=75, step=1, key="personal_expected_exam_pct", help="A planning estimate. Change it to compare realistic and stretch scenarios.")
+            target_cgpa = st.number_input("Target CGPA", min_value=0.0, max_value=10.0, value=8.5, step=0.1, key="personal_target_cgpa")
+
+        st.markdown("**Editable grade-point table**")
+        st.caption("The rows below are example values only, not an official Anna University/KRCE grade table. Replace the cutoffs and grade points with the values published by your college.")
+        grade_defaults = pd.DataFrame([
+            {"Minimum final %": 90.0, "Grade label": "Example grade 1", "Grade point": 10.0},
+            {"Minimum final %": 80.0, "Grade label": "Example grade 2", "Grade point": 9.0},
+            {"Minimum final %": 70.0, "Grade label": "Example grade 3", "Grade point": 8.0},
+            {"Minimum final %": 60.0, "Grade label": "Example grade 4", "Grade point": 7.0},
+            {"Minimum final %": 50.0, "Grade label": "Example grade 5", "Grade point": 6.0},
+            {"Minimum final %": 0.0, "Grade label": "Example grade 6", "Grade point": 0.0},
+        ])
+        grade_table = st.data_editor(grade_defaults, key="personal_grade_table", num_rows="dynamic", hide_index=True, use_container_width=True,
+            column_config={"Minimum final %": st.column_config.NumberColumn(min_value=0, max_value=100, step=1),
+                           "Grade label": st.column_config.TextColumn(),
+                           "Grade point": st.column_config.NumberColumn(min_value=0, max_value=10, step=0.5)})
+
     if int(internal_weight) + int(exam_weight) != 100:
-        st.warning("Your internal and semester-exam weights currently add up to " + str(int(internal_weight)+int(exam_weight)) + ", not 100. The estimate still uses the weights as entered; adjust them to match your official scheme.")
-    st.divider()
-    st.subheader("1. Enter your known CIA scores")
-    m1, m2, m3 = st.columns(3)
-    with m1:
-        cia1 = st.number_input("CIA 1 score", min_value=0.0, max_value=float(cia_max), value=min(35.0,float(cia_max)), step=1.0, key="planner_cia1")
-    with m2:
-        cia2 = st.number_input("CIA 2 score", min_value=0.0, max_value=float(cia_max), value=min(40.0,float(cia_max)), step=1.0, key="planner_cia2")
-    with m3:
-        cia3_expected = st.number_input("Try a CIA 3 score", min_value=0.0, max_value=float(cia_max), value=min(40.0,float(cia_max)), step=1.0, key="planner_cia3", help="Change this value to test different outcomes. The required-score calculation is shown below.")
-    exam_expected = st.slider("Semester-exam score you think you can achieve", min_value=0, max_value=int(exam_max), value=int(round(exam_max*0.8)), step=1, key="planner_exam_expected")
-
-    c1p, c2p = float(cia1)/float(cia_max)*100, float(cia2)/float(cia_max)*100
-    c3p = float(cia3_expected)/float(cia_max)*100
-    examp = float(exam_expected)/float(exam_max)*100
-    cia_values = [c1p,c2p,c3p]
-    if cia_method == "Average all 3":
-        internal_pct = sum(cia_values)/3
-        combine_note = "The internal estimate uses the average of all three CIA percentages."
-        def needed_cia3(required_internal_pct):
-            return max(0.0, 3*required_internal_pct-c1p-c2p)
-    else:
-        internal_pct = sum(sorted(cia_values, reverse=True)[:2])/2
-        combine_note = "The internal estimate uses the best two CIA percentages."
-        def needed_cia3(required_internal_pct):
-            if (c1p+c2p)/2 >= required_internal_pct:
-                return 0.0
-            return max(0.0, 2*required_internal_pct-max(c1p,c2p))
-
-    internal_contribution = internal_pct*float(internal_weight)/100
-    exam_contribution = examp*float(exam_weight)/100
-    final_estimate = internal_contribution+exam_contribution
-    k1,k2,k3,k4 = st.columns(4)
-    k1.metric("Current CIA-based internal level", f"{internal_pct:.1f}%")
-    k2.metric("Internal contribution", f"{internal_contribution:.1f}/{internal_weight}")
-    k3.metric("Exam contribution estimate", f"{exam_contribution:.1f}/{exam_weight}")
-    k4.metric("Estimated final score", f"{final_estimate:.1f}/100", delta=f"Target {target_total}%" if final_estimate>=target_total else f"{target_total-final_estimate:.1f} points below target")
-    st.caption(combine_note + " All calculations assume CIA scores scale linearly to the internal component; change settings to match your official scheme.")
+        st.warning(f"Internal and exam weights currently total {int(internal_weight) + int(exam_weight)}%, not 100%. Adjust them to match the official scheme before interpreting results.")
 
     st.divider()
-    st.subheader("2. What do you need in CIA 3?")
-    expected_exam_contribution = examp*float(exam_weight)/100
-    required_internal_pct = (float(target_total)-expected_exam_contribution)*100/float(internal_weight)
-    required_cia3_pct = needed_cia3(required_internal_pct) if required_internal_pct <= 100 else float('inf')
-    required_cia3_raw = required_cia3_pct*float(cia_max)/100
-    if required_internal_pct <= 0:
-        st.success(f"With your expected semester-exam score, you have already reached the target contribution. Any CIA 3 score keeps the estimate at or above {target_total}% under this model.")
-    elif required_internal_pct > 100 or required_cia3_raw > float(cia_max):
-        st.warning(f"The target of {target_total}% is not reachable with the semester-exam score you entered under these settings. Increase the expected exam score, adjust your target, or verify the marking scheme.")
-    else:
-        st.success(f"Estimated CIA 3 requirement: **{required_cia3_raw:.1f} / {cia_max}** to target {target_total}% overall, assuming you score {exam_expected}/{exam_max} in the semester exam.")
-    goals = []
-    for goal in [60,70,75,80,85,90]:
-        exam_contrib = examp*float(exam_weight)/100
-        req_internal = (goal-exam_contrib)*100/float(internal_weight)
-        req_c3 = needed_cia3(req_internal) if req_internal <= 100 else float('inf')
-        raw_req = req_c3*float(cia_max)/100
-        if req_internal <= 0: status = "Already supported by expected exam score"; display = "0 needed"
-        elif req_internal > 100 or raw_req > float(cia_max): status = "Not reachable with current exam estimate"; display = "Not reachable"
-        else: status = "Possible under current assumptions"; display = f"{raw_req:.1f}/{cia_max}"
-        goals.append({"Final score target":f"{goal}%","CIA 3 needed":display,"Status":status})
-    st.dataframe(pd.DataFrame(goals),hide_index=True,use_container_width=True)
+    st.subheader("2. Enter your subjects and CIA marks")
+    st.caption("Enter CIA 1 and CIA 2 marks you already received. CIA 3 is not known yet, so use the expected CIA 3 column to try scenarios. Replace the example subject names, credits and marks with your own.")
+    default_subjects = [str(x) for x in (sorted(df["subject"].dropna().astype(str).unique().tolist())[:8] if not df.empty else [])]
+    if not default_subjects:
+        default_subjects = ["Subject 1", "Subject 2", "Subject 3", "Subject 4", "Subject 5"]
+    subject_defaults = pd.DataFrame({
+        "Subject": default_subjects,
+        "CIA 1": [min(35.0, float(cia_max))] * len(default_subjects),
+        "CIA 2": [min(40.0, float(cia_max))] * len(default_subjects),
+        "Expected CIA 3": [min(40.0, float(cia_max))] * len(default_subjects),
+        "Credits": [0.0] * len(default_subjects),
+        "Syllabus ready %": [0] * len(default_subjects),
+        "Target final %": [85.0] * len(default_subjects),
+    })
+    subjects_input = st.data_editor(subject_defaults, key="personal_subject_inputs", num_rows="dynamic", hide_index=True, use_container_width=True,
+        column_config={
+            "Subject": st.column_config.TextColumn(required=True),
+            "CIA 1": st.column_config.NumberColumn(min_value=0, max_value=float(cia_max), step=1),
+            "CIA 2": st.column_config.NumberColumn(min_value=0, max_value=float(cia_max), step=1),
+            "Expected CIA 3": st.column_config.NumberColumn(min_value=0, max_value=float(cia_max), step=1),
+            "Credits": st.column_config.NumberColumn(min_value=0, max_value=30, step=1, help="Enter official subject credits. A zero credit value is excluded from GPA calculations."),
+            "Syllabus ready %": st.column_config.NumberColumn(min_value=0, max_value=100, step=5),
+            "Target final %": st.column_config.NumberColumn(min_value=0, max_value=100, step=1),
+        })
+
+    if subjects_input.empty:
+        st.warning("Add at least one subject to calculate your plan.")
+    elif int(internal_weight) + int(exam_weight) == 100:
+        valid_grades = grade_table.copy()
+        valid_grades["Minimum final %"] = pd.to_numeric(valid_grades["Minimum final %"], errors="coerce")
+        valid_grades["Grade point"] = pd.to_numeric(valid_grades["Grade point"], errors="coerce")
+        valid_grades = valid_grades.dropna(subset=["Minimum final %", "Grade point", "Grade label"]).sort_values("Minimum final %", ascending=False)
+
+        def point_for_score(score):
+            if not valid_grades.empty:
+                for _, band in valid_grades.iterrows():
+                    if score >= float(band["Minimum final %"]):
+                        return float(band["Grade point"]), str(band["Grade label"])
+            return 0.0, "Unmapped"
+
+        result_rows = []
+        study_rows = []
+        def safe_num(value, default=0.0):
+            try:
+                if pd.isna(value):
+                    return float(default)
+                return float(value)
+            except (TypeError, ValueError):
+                return float(default)
+
+        for _, row in subjects_input.iterrows():
+            raw_subject = row.get("Subject", "")
+            if pd.isna(raw_subject):
+                continue
+            subject = str(raw_subject).strip()
+            if not subject:
+                continue
+            c1 = safe_num(row.get("CIA 1", 0))
+            c2 = safe_num(row.get("CIA 2", 0))
+            c3_plan = safe_num(row.get("Expected CIA 3", 0))
+            credits = max(0.0, safe_num(row.get("Credits", 0)))
+            readiness = float(np.clip(safe_num(row.get("Syllabus ready %", 0)), 0, 100))
+            target_pct = float(np.clip(safe_num(row.get("Target final %", 85), 85), 0, 100))
+            c1p, c2p, c3p = [np.clip(v / float(cia_max) * 100, 0, 100) for v in (c1, c2, c3_plan)]
+            internal_pct = (c1p + c2p + c3p) / 3.0
+            internal_contribution = internal_pct * float(internal_weight) / 100.0
+            estimated_final = internal_contribution + float(expected_exam_pct) * float(exam_weight) / 100.0
+            req_internal_pct = (target_pct - float(expected_exam_pct) * float(exam_weight) / 100.0) * 100.0 / float(internal_weight)
+            req_cia3_pct = max(0.0, 3.0 * req_internal_pct - c1p - c2p)
+            if req_internal_pct <= 0:
+                cia3_needed = 0.0
+                cia3_status = "Target covered by exam estimate"
+            elif req_internal_pct > 100 or req_cia3_pct > 100:
+                cia3_needed = np.nan
+                cia3_status = "Not reachable at current exam estimate"
+            else:
+                cia3_needed = req_cia3_pct * float(cia_max) / 100.0
+                cia3_status = "Achievable under entered assumptions" if cia3_needed <= cia_max else "Not reachable"
+            exam_required_pct = (target_pct - internal_contribution) * 100.0 / float(exam_weight)
+            if exam_required_pct <= 0:
+                exam_needed = 0.0
+                exam_status = "Target covered by internal estimate*"
+            elif exam_required_pct > 100:
+                exam_needed = np.nan
+                exam_status = "Not reachable with current CIA 3 estimate"
+            else:
+                exam_needed = exam_required_pct * float(exam_max) / 100.0
+                exam_status = "Achievable under entered assumptions"
+            gp, grade_label = point_for_score(estimated_final)
+            result_rows.append({
+                "Subject": subject, "CIA 1": round(c1, 1), "CIA 2": round(c2, 1),
+                "Expected CIA 3": round(c3_plan, 1), "CIA 3 needed for target": round(cia3_needed, 1) if pd.notna(cia3_needed) else "Not reachable",
+                "Target final %": round(target_pct, 1), "Exam mark needed": round(exam_needed, 1) if pd.notna(exam_needed) else "Not reachable",
+                "Expected exam %": float(expected_exam_pct), "Estimated final %": round(estimated_final, 1),
+                "Example grade band": grade_label, "Grade point": gp, "Credits": credits,
+                "CIA 3 status": cia3_status, "Exam target status": exam_status,
+            })
+            # Focus more study time on weak CIA performance and lower syllabus readiness.
+            known_avg = (c1p + c2p) / 2.0
+            priority = (100.0 - known_avg) * 0.65 + (100.0 - readiness) * 0.35
+            study_rows.append({"Subject": subject, "CIA 1–2 average %": round(known_avg, 1), "Syllabus ready %": readiness,
+                               "Priority score": round(priority, 1), "Target final %": target_pct, "Credits": credits})
+
+        results = pd.DataFrame(result_rows)
+        if not results.empty:
+            st.subheader("3. Your CIA 3 recovery and semester-exam targets")
+            st.caption("CIA 3 target assumes the three CIA percentages are averaged equally. Exam targets assume a linear internal/exam weighting and do not enforce any official minimum exam mark or rounding rule.")
+            st.dataframe(results[["Subject", "CIA 1", "CIA 2", "Expected CIA 3", "CIA 3 needed for target", "Target final %", "Exam mark needed", "Estimated final %", "Example grade band", "CIA 3 status", "Exam target status"]], hide_index=True, use_container_width=True)
+            if (results["CIA 3 status"] == "Not reachable at current exam estimate").any():
+                st.warning("Some CIA 3 targets are not reachable with your current expected semester-exam performance. Raise the exam-performance estimate, lower the target, or check the assessment settings.")
+            if (results["Exam target status"] == "Not reachable with current CIA 3 estimate").any():
+                st.warning("Some subject targets are not reachable through the semester exam alone under the entered assumptions. Use the results to prioritize effort, not as a guarantee.")
+
+            # Credit-weighted GPA estimate, only for subjects with user-entered positive credits.
+            credited = results[pd.to_numeric(results["Credits"], errors="coerce") > 0].copy()
+            if not credited.empty:
+                total_credits = float(credited["Credits"].sum())
+                estimated_sgpa = float((credited["Grade point"] * credited["Credits"]).sum() / total_credits)
+                st.divider()
+                st.subheader("4. Semester GPA and CGPA goal tracker")
+                g1, g2, g3 = st.columns(3)
+                g1.metric("Credits entered", f"{total_credits:g}")
+                g2.metric("Estimated semester GPA", f"{estimated_sgpa:.2f}/10", help="Credit-weighted estimate using the editable grade-point table above.")
+                g3.metric("CGPA goal", f"{target_cgpa:.2f}/10")
+                st.caption("GPA is estimated from the example grade table and your entered credits. Replace example grade cutoffs/points and verify how your college handles failed, audited, practical and non-credit courses.")
+                cg1, cg2, cg3 = st.columns(3)
+                with cg1:
+                    current_cgpa = st.number_input("Current CGPA before this semester", min_value=0.0, max_value=10.0, value=7.5, step=0.01, key="personal_current_cgpa", help="Enter the official CGPA shown on your marksheet.")
+                with cg2:
+                    completed_credits = st.number_input("Credits completed before this semester", min_value=0.0, max_value=500.0, value=24.0, step=1.0, key="personal_completed_credits", help="Enter total credits already counted in your current CGPA.")
+                with cg3:
+                    current_sem_credits = st.number_input("Credits counted this semester", min_value=0.0, max_value=60.0, value=total_credits, step=1.0, key="personal_semester_credits", help="Defaults to the sum of credits entered above. Change if not every listed subject counts toward GPA.")
+                if current_sem_credits > 0:
+                    needed_sgpa = (float(target_cgpa) * (float(completed_credits) + float(current_sem_credits)) - float(current_cgpa) * float(completed_credits)) / float(current_sem_credits)
+                    if needed_sgpa > 10:
+                        st.error(f"To reach CGPA {target_cgpa:.2f} immediately, the required semester GPA would be {needed_sgpa:.2f}, above 10.0. The target may need more than one semester; this is a planning calculation, not a verdict.")
+                    elif needed_sgpa <= 0:
+                        st.success(f"Based on the credits and current CGPA entered, the target CGPA is already covered mathematically even with a very low semester GPA. Verify your official credit/grade rules.")
+                    else:
+                        st.success(f"Estimated semester GPA needed to reach CGPA {target_cgpa:.2f} after this semester: **{needed_sgpa:.2f}/10**.")
+                    scenario_rows = []
+                    for scenario_sgpa in [6.0, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0]:
+                        resulting = (float(current_cgpa) * float(completed_credits) + scenario_sgpa * float(current_sem_credits)) / (float(completed_credits) + float(current_sem_credits)) if completed_credits + current_sem_credits > 0 else scenario_sgpa
+                        scenario_rows.append({"Scenario semester GPA": scenario_sgpa, "Projected CGPA": round(resulting, 3), "Reaches target?": "Yes" if resulting >= float(target_cgpa) else "Not yet"})
+                    st.dataframe(pd.DataFrame(scenario_rows), hide_index=True, use_container_width=True)
+                    scenario_chart = pd.DataFrame(scenario_rows)
+                    fig = px.line(scenario_chart, x="Scenario semester GPA", y="Projected CGPA", markers=True, title="How this semester's GPA affects your CGPA")
+                    fig.add_hline(y=float(target_cgpa), line_dash="dash", annotation_text=f"Target CGPA {target_cgpa:.2f}")
+                    st.plotly_chart(plot_layout(fig, 320), use_container_width=True)
+                else:
+                    st.info("Enter the number of credits that count toward this semester's GPA to calculate CGPA scenarios.")
+            else:
+                st.info("Enter official subject credits (greater than zero) in the subject table to enable semester GPA and CGPA estimates.")
+
+            st.divider()
+            st.subheader("5. Your personalized 3.5-hour daily study guide")
+            st.write("Since semester-exam preparation has not started, use the first week to build coverage, then move quickly into active recall and timed practice. The plan allocates more time to subjects with lower CIA performance and lower syllabus readiness.")
+            study_df = pd.DataFrame(study_rows).sort_values("Priority score", ascending=False)
+            st.markdown("**Subject priority order**")
+            st.dataframe(study_df[["Subject", "CIA 1–2 average %", "Syllabus ready %", "Priority score", "Target final %"]], hide_index=True, use_container_width=True)
+            top_subjects = study_df["Subject"].tolist()
+            session_subjects = (top_subjects + ["Mixed revision"] * 7)[:7]
+            day_plan = []
+            for day in range(7):
+                sub = session_subjects[day]
+                day_plan.append({"Day": f"Day {day + 1}", "Block 1 — 75 min": f"{sub}: learn concepts and make concise notes", "Block 2 — 60 min": f"{sub}: solve examples without looking at solutions", "Block 3 — 45 min": "Recall yesterday's topics and write key formulas/definitions", "Block 4 — 30 min": "Closed-book quiz, error log, and plan tomorrow", "Done": False})
+            st.dataframe(pd.DataFrame(day_plan).drop(columns=["Done"]), hide_index=True, use_container_width=True)
+            st.markdown("**Daily routine (210 minutes = 3.5 hours)**")
+            st.markdown("- **75 min:** Study the highest-priority subject/topic from class notes and prescribed material.\n- **60 min:** Solve questions or past-paper problems without checking the answer first.\n- **45 min:** Active recall from yesterday's topics; explain the concept in your own words.\n- **30 min:** Short timed quiz, record mistakes, and choose tomorrow's first task.\n\nTake short breaks between blocks. Reserve at least one block daily for the subject with the weakest CIA 1–2 average, and rotate the other blocks across remaining subjects.")
+            with st.expander("Weekly checklist", expanded=False):
+                checklist = ["List all syllabus units and mark completed / partial / not started", "Collect prescribed notes and previous question papers", "Create an error log from CIA 1 and CIA 2 mistakes", "Complete one timed practice set in each subject", "Revise definitions, formulas, diagrams and common problem steps", "Do a weekly review and update syllabus readiness percentages", "Ask faculty about topics or assessment rules that remain unclear"]
+                for i, task in enumerate(checklist):
+                    st.checkbox(task, key=f"personal_weekly_check_{i}")
+            st.download_button("Download my subject targets (CSV)", results.to_csv(index=False).encode("utf-8"), "semscore_personal_targets.csv", "text/csv")
+            st.download_button("Download my 7-day study plan (CSV)", pd.DataFrame(day_plan).to_csv(index=False).encode("utf-8"), "semscore_7_day_study_plan.csv", "text/csv")
 
     st.divider()
-    st.subheader("3. What semester-exam score do you need?")
-    if final_estimate >= target_total:
-        st.info(f"With CIA 3 = {cia3_expected}/{cia_max}, your current exam estimate gives {final_estimate:.1f}/100, which meets the selected target.")
-    required_exam_pct = (float(target_total)-internal_contribution)*100/float(exam_weight)
-    required_exam_raw = required_exam_pct*float(exam_max)/100
-    if required_exam_pct <= 0:
-        st.success(f"Your estimated internal contribution already meets the target of {target_total}%. The model does not require a positive exam score for this target, but follow your institution's minimum-exam rules.")
-    elif required_exam_pct > 100:
-        st.warning(f"With CIA 3 = {cia3_expected}/{cia_max}, the target of {target_total}% is not reachable through the semester exam alone under these settings.")
-    else:
-        st.success(f"With CIA 3 = {cia3_expected}/{cia_max}, aim for at least **{required_exam_raw:.1f}/{exam_max}** in the semester exam to reach {target_total}% overall under this model.")
-    st.caption("Important: this is a planning prototype, not an official grade predictor. Grade cutoffs shown are illustrative and editable. It does not enforce official minimum CIA/semester-exam requirements, rounding rules, course-category differences, or KRCE autonomous regulations. Confirm the exact scheme with your department before using the results.")
+    st.caption("Planning aid only. Final marks, pass eligibility, letter grades, grade points, SGPA and CGPA must be calculated using the official KRCE autonomous regulations applicable to your programme and course. No official outcome is guaranteed.")
 
 # ---------- Overview ----------
 elif page=="Overview":
